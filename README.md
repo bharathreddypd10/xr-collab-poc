@@ -42,8 +42,7 @@ This project is a practical XR multiplayer POC built in Unity. The current repo 
 
 ## Main Scenes
 
-- `Assets/Scenes/SampleScene.unity`
-- `Assets/XRMP/BasicScene.unity`
+- `Assets/_Project/Scenes/TabletopCollabScene.unity`
 
 ## Project Structure
 
@@ -51,24 +50,29 @@ This project is a practical XR multiplayer POC built in Unity. The current repo 
 - `.gitignore`
 - `AGENTS.md`
 - `Assets/`
-  - `CompositionLayers/`
   - `Editor/`
-  - `MRTabletopAssets/`
+  - `Plugins/`
   - `Resources/`
-  - `Samples/`
-  - `Scenes/`
-    - `SampleScene.unity`
   - `StreamingAssets/`
+  - `ThirdParty/`
+    - `MRTabletopAssets/`
+    - `XRMP/`
+  - `_Project/`
+    - `Animations/`
+    - `Audio/`
+    - `Materials/`
+    - `Models/`
+    - `Prefabs/`
+    - `Scenes/`
+      - `TabletopCollabScene.unity`
+    - `Scripts/`
+    - `ScriptableObjects/`
+    - `Shaders/`
+    - `Textures/`
+  - `CompositionLayers/`
   - `TextMesh Pro/`
   - `XR/`
   - `XRI/`
-  - `XRMP/`
-    - `BasicScene.unity`
-    - `AvatarMaterials/`
-    - `Models/`
-    - `Prefabs/`
-    - `Scripts/`
-    - `Textures/`
 - `Packages/`
   - `manifest.json`
   - `packages-lock.json`
@@ -93,4 +97,4 @@ This repo follows the documented branching model:
 - `devA/*` for XR, interaction, and UI work
 - `devB/*` for networking, sync, and voice work
 
-See [XR POC Git Workflow.md](/home/uquest/Learning/XR%20POC/XR%20POC%20Git%20Workflow.md) for the detailed workflow.
+See [XR POC Git Workflow.md](/home/uquest/Learning/XR POC/XR POC Git Workflow.md) for the detailed workflow.
