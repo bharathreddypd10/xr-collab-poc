@@ -1,139 +1,90 @@
 using Fusion;
 using Fusion.Sockets;
-using UnityEngine;
-using UnityEngine.SceneManagement;
 using System;
 using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class NetworkRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
 {
-    // Assign PlayerCapsule prefab in Inspector
-    // Prefab MUST contain:
-    // - NetworkObject
-    // - NetworkTransform
+    [Header("Network Prefabs")]
+    public NetworkPrefabRef xrAvatarPrefab;
 
-    public NetworkObject playerPrefab;
+    [Header("Spawn Settings")]
+    public Transform spawnPoint;
 
     private NetworkRunner runner;
 
+    private Dictionary<PlayerRef, NetworkObject> spawnedPlayers =
+        new Dictionary<PlayerRef, NetworkObject>();
+
     async void Start()
     {
-        Debug.Log("[Fusion] Creating Runner");
-
         runner = gameObject.AddComponent<NetworkRunner>();
 
-        runner.ProvideInput = true;
-
-        var sceneManager =
-            gameObject.AddComponent<NetworkSceneManagerDefault>();
-
-        runner.AddCallbacks(this);
-
-        Debug.Log("[Fusion] Starting Game");
+        runner.ProvideInput = false;
 
         await runner.StartGame(new StartGameArgs()
         {
             GameMode = GameMode.Shared,
-            SessionName = "TestRoom",
-
-            Scene = SceneRef.FromIndex(
-                SceneManager.GetActiveScene().buildIndex
-            ),
-
-            SceneManager = sceneManager,
-
-            PlayerCount = 4
+            SessionName = "XRMeetingRoom",
+            Scene = SceneRef.FromIndex(SceneManager.GetActiveScene().buildIndex),
+            SceneManager = gameObject.AddComponent<NetworkSceneManagerDefault>()
         });
 
-        Debug.Log("[Fusion] StartGame Complete");
+        Debug.Log("Fusion Started");
     }
 
     public void OnPlayerJoined(NetworkRunner runner, PlayerRef player)
+{
+    Debug.Log($"Player Joined: {player}");
+
+    Vector3 spawnPosition = new Vector3(-2,0,2);
+
+    NetworkObject avatar =
+        runner.Spawn(
+            xrAvatarPrefab,
+            spawnPosition,
+            Quaternion.identity,
+            player
+        );
+
+    if (avatar != null)
     {
-        Debug.Log($"[Fusion] Player Joined: {player}");
+        Debug.Log("XRAvatar Spawned Successfully");
+        Debug.Log("Spawned Object Name: " + avatar.name);
 
-        // In Shared Mode:
-        // each player spawns THEIR OWN object
-        if (runner.LocalPlayer == player)
-        {
-            Vector3 spawnPosition =
-                new Vector3(
-                    player.RawEncoded * 3,
-                    1,
-                    0
-                );
-
-            Debug.Log($"[Fusion] Spawning at {spawnPosition}");
-
-            var spawnedObject = runner.Spawn(
-                playerPrefab,
-                spawnPosition,
-                Quaternion.identity,
-                player
-            );
-
-            if (spawnedObject != null)
-            {
-                Debug.Log(
-                    $"[Fusion] Spawn SUCCESS: {spawnedObject.name}"
-                );
-            }
-            else
-            {
-                Debug.LogError("[Fusion] Spawn FAILED");
-            }
-        }
+        spawnedPlayers.Add(player, avatar);
     }
+    else
+    {
+        Debug.LogError("XRAvatar Spawn FAILED");
+    }
+}
 
     public void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
     {
-        Debug.Log($"[Fusion] Player Left: {player}");
+        if (spawnedPlayers.TryGetValue(player, out NetworkObject avatar))
+        {
+            runner.Despawn(avatar);
+
+            spawnedPlayers.Remove(player);
+        }
     }
+
+    // =========================
+    // REQUIRED CALLBACKS
+    // =========================
 
     public void OnInput(NetworkRunner runner, NetworkInput input)
     {
-        Vector2 move = Vector2.zero;
-
-        if (Input.GetKey(KeyCode.W) ||
-            Input.GetKey(KeyCode.UpArrow))
-        {
-            move.y += 1f;
-        }
-
-        if (Input.GetKey(KeyCode.S) ||
-            Input.GetKey(KeyCode.DownArrow))
-        {
-            move.y -= 1f;
-        }
-
-        if (Input.GetKey(KeyCode.A) ||
-            Input.GetKey(KeyCode.LeftArrow))
-        {
-            move.x -= 1f;
-        }
-
-        if (Input.GetKey(KeyCode.D) ||
-            Input.GetKey(KeyCode.RightArrow))
-        {
-            move.x += 1f;
-        }
-
-        input.Set(new NetworkInputData
-        {
-            Move = move.normalized
-        });
     }
 
-    public void OnInputMissing(
-        NetworkRunner runner,
-        PlayerRef player,
-        NetworkInput input)
+    public void OnInputMissing(NetworkRunner runner, PlayerRef player, NetworkInput input)
     {
     }
 
-    public void OnShutdown(
-        NetworkRunner runner,
-        ShutdownReason shutdownReason)
+    public void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason)
     {
     }
 
@@ -141,9 +92,7 @@ public class NetworkRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
     {
     }
 
-    public void OnDisconnectedFromServer(
-        NetworkRunner runner,
-        NetDisconnectReason reason)
+    public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason)
     {
     }
 
@@ -203,12 +152,10 @@ public class NetworkRunnerManager : MonoBehaviour, INetworkRunnerCallbacks
 
     public void OnSceneLoadDone(NetworkRunner runner)
     {
-        Debug.Log("[Fusion] Scene Load Done");
     }
 
     public void OnSceneLoadStart(NetworkRunner runner)
     {
-        Debug.Log("[Fusion] Scene Load Start");
     }
 
     public void OnObjectExitAOI(
