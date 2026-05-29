@@ -5,7 +5,6 @@ public class JoinRoomUIManager : MonoBehaviour
 {
     public GameObject joinPanel;
     public GameObject networkRunnerManager;
-    public GameObject localAvatar;
     public TMP_InputField roomCodeInput;
     public TMP_Text statusText;
 
@@ -22,7 +21,6 @@ public class JoinRoomUIManager : MonoBehaviour
         PlayerPrefs.SetString("RoomCode", roomCode);
 
         joinPanel.SetActive(false);
-        localAvatar.SetActive(true);
         networkRunnerManager.SetActive(true);
 
         statusText.text = "Joining room...";
