@@ -5,6 +5,9 @@ EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
   m_Scenes:
+  - enabled: 1
+    path: Assets/_Project/Scenes/MeetingRoom.unity
+    guid: 1f2659ccd28d24b3c960d0baf98cf36e
   - enabled: 0
     path: Assets/_Project/Scenes/TabletopCollabScene.unity
     guid: 1394aae0248047f43a644e21c762f218
@@ -17,5 +20,7 @@ EditorBuildSettings:
     com.unity.xr.management.loader_settings: {fileID: 11400000, guid: e4092494f37fcd74c9e900c0aa72f3ef,
       type: 2}
     com.unity.xr.openxr.settings4: {fileID: 11400000, guid: 95390e03a10f8774d98cb17f6e3a51dd,
+      type: 2}
+    xr.sdk.mock-hmd.settings: {fileID: 11400000, guid: d80f92a88c675fff7bd4ff7a6dfc6a22,
       type: 2}
   m_UseUCBPForAssetBundles: 0

@@ -3,28 +3,64 @@ using TMPro;
 
 public class JoinRoomUIManager : MonoBehaviour
 {
-    public GameObject joinPanel;
-    public GameObject networkRunnerManager;
-    public GameObject localAvatar;
+    [Header("UI")]
     public TMP_InputField roomCodeInput;
     public TMP_Text statusText;
 
-    public void JoinRoom()
+    public async void CreateRoom()
     {
-        string roomCode = roomCodeInput.text;
+        string roomCode = GenerateRoomCode();
 
-        if (string.IsNullOrWhiteSpace(roomCode))
+        roomCodeInput.text = roomCode;
+
+        statusText.text = "Creating Room...";
+
+        bool success =
+            await FusionManager.Instance.StartSession(roomCode);
+
+        if (success)
         {
-            statusText.text = "Enter room code";
+            statusText.text =
+                $"Room Created: {roomCode}";
+        }
+        else
+        {
+            statusText.text =
+                "Failed to create room";
+        }
+    }
+
+    public async void JoinRoom()
+    {
+        string roomCode = roomCodeInput.text.Trim();
+
+        if (string.IsNullOrEmpty(roomCode))
+        {
+            statusText.text =
+                "Enter Room Code";
             return;
         }
 
-        PlayerPrefs.SetString("RoomCode", roomCode);
+        statusText.text =
+            "Joining Room...";
 
-        joinPanel.SetActive(false);
-        localAvatar.SetActive(true);
-        networkRunnerManager.SetActive(true);
+        bool success =
+            await FusionManager.Instance.StartSession(roomCode);
 
-        statusText.text = "Joining room...";
+        if (success)
+        {
+            statusText.text =
+                $"Joined: {roomCode}";
+        }
+        else
+        {
+            statusText.text =
+                "Failed to Join";
+        }
+    }
+
+    private string GenerateRoomCode()
+    {
+        return "XR" + Random.Range(1000, 9999);
     }
 }
