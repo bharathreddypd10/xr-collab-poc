@@ -15,6 +15,9 @@ public class FusionManager : MonoBehaviour, INetworkRunnerCallbacks
 
     private NetworkRunner runner;
 
+    [SerializeField]
+    private Transform[] spawnPoints;
+
     private void Awake()
     {
         if (Instance == null)
@@ -61,14 +64,15 @@ public class FusionManager : MonoBehaviour, INetworkRunnerCallbacks
 
         if (player == runner.LocalPlayer)
         {
-            Transform head = Camera.main.transform;
+            int index =
+            (player.PlayerId - 1) % spawnPoints.Length;
 
-runner.Spawn(
-    playerAvatarPrefab,
-    head.position,
-    head.rotation,
-    player
-);
+        runner.Spawn(
+            playerAvatarPrefab,
+            spawnPoints[index].position,
+            spawnPoints[index].rotation,
+            player
+        );
 
             Debug.Log("Spawned Local Avatar");
         }
