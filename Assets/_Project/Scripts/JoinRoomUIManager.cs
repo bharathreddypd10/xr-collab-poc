@@ -1,48 +1,83 @@
 using UnityEngine;
 using TMPro;
 
+
 public class JoinRoomUIManager : MonoBehaviour
 {
     [Header("UI")]
+    public GameObject roomPanel;
+
     public TMP_InputField roomCodeInput;
+
     public TMP_Text statusText;
+
+    public GameObject createRoomButton;
+
+    public GameObject joinRoomButton;
+
+    private string currentRoomCode;
 
     public async void CreateRoom()
     {
         string roomCode = GenerateRoomCode();
 
-        roomCodeInput.text = roomCode;
+        currentRoomCode = roomCode;
 
-        statusText.text = "Creating Room...";
+        roomCodeInput.text = "";
+
+        statusText.text =
+            $"Creating Room : {roomCode}";
 
         bool success =
             await FusionManager.Instance.StartSession(roomCode);
 
         if (success)
-        {
-            statusText.text =
-                $"Room Created: {roomCode}";
-        }
+{
+    GUIUtility.systemCopyBuffer =
+        roomCode;
+
+    statusText.text =
+        $"Room Created\n\n{roomCode}\n\nCode Copied";
+
+    Invoke(nameof(HideUI), 1f);
+}
         else
         {
             statusText.text =
-                "Failed to create room";
+                "Failed To Create Room";
         }
     }
 
+private void HideUI()
+{
+    roomPanel.SetActive(false);
+}
     public async void JoinRoom()
     {
-        string roomCode = roomCodeInput.text.Trim();
+        string roomCode =
+            roomCodeInput.text.Trim().ToUpper();
 
         if (string.IsNullOrEmpty(roomCode))
         {
             statusText.text =
                 "Enter Room Code";
+
+            return;
+        }
+
+        bool roomExists =
+            FusionManager.Instance.RoomExists(roomCode);
+
+        if (!roomExists)
+        {
+            statusText.text =
+                "No Rooms Available To Join";
+
             return;
         }
 
         statusText.text =
-            "Joining Room...";
+            $"Joining : {roomCode}";
 
         bool success =
             await FusionManager.Instance.StartSession(roomCode);
@@ -50,14 +85,29 @@ public class JoinRoomUIManager : MonoBehaviour
         if (success)
         {
             statusText.text =
-                $"Joined: {roomCode}";
+                $"Joined\n\n{roomCode}";
+
+            Invoke(nameof(HideUI), 1f);
         }
         else
         {
             statusText.text =
-                "Failed to Join";
+                "Failed To Join";
         }
     }
+
+//     private IEnumerator HideUIAfterDelay()
+// {
+//     yield return new WaitForSeconds(1f);
+
+//     roomCodeInput.gameObject.SetActive(false);
+
+//     createRoomButton.SetActive(false);
+
+//     joinRoomButton.SetActive(false);
+
+//     statusText.gameObject.SetActive(false);
+// }
 
     private string GenerateRoomCode()
     {

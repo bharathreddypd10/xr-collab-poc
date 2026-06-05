@@ -10,6 +10,9 @@ public class FusionManager : MonoBehaviour, INetworkRunnerCallbacks
 {
     public static FusionManager Instance;
 
+    private List<SessionInfo> activeSessions =
+        new List<SessionInfo>();
+
     [Header("Avatar Prefab")]
     public NetworkPrefabRef playerAvatarPrefab;
 
@@ -31,25 +34,49 @@ public class FusionManager : MonoBehaviour, INetworkRunnerCallbacks
         }
     }
 
+    private async void Start()
+    {
+        if (runner == null)
+        {
+            runner = gameObject.AddComponent<NetworkRunner>();
+
+            runner.ProvideInput = true;
+
+            runner.AddCallbacks(this);
+
+            var sceneManager =
+                gameObject.AddComponent<NetworkSceneManagerDefault>();
+
+            // Optional lobby join for room listing
+await runner.JoinSessionLobby(SessionLobby.Shared);
+        }
+    }
+
     public async Task<bool> StartSession(string roomName)
 {
     if (runner == null)
+        return false;
+
+    if (runner.IsRunning)
     {
-        runner = gameObject.AddComponent<NetworkRunner>();
-        runner.ProvideInput = true;
-        runner.AddCallbacks(this);
+        await runner.Shutdown();
     }
 
-    var sceneManager = GetComponent<NetworkSceneManagerDefault>();
+    var sceneManager =
+        GetComponent<NetworkSceneManagerDefault>();
 
     if (sceneManager == null)
-        sceneManager = gameObject.AddComponent<NetworkSceneManagerDefault>();
+    {
+        sceneManager =
+            gameObject.AddComponent<NetworkSceneManagerDefault>();
+    }
 
     var result = await runner.StartGame(new StartGameArgs
     {
         GameMode = GameMode.Shared,
         SessionName = roomName,
-        Scene = SceneRef.FromIndex(SceneManager.GetActiveScene().buildIndex),
+        Scene = SceneRef.FromIndex(
+            SceneManager.GetActiveScene().buildIndex),
         SceneManager = sceneManager
     });
 
@@ -58,52 +85,80 @@ public class FusionManager : MonoBehaviour, INetworkRunnerCallbacks
     return result.Ok;
 }
 
-    public void OnPlayerJoined(NetworkRunner runner, PlayerRef player)
+    public bool RoomExists(string roomCode)
+    {
+        foreach (var session in activeSessions)
+        {
+            if (session.Name == roomCode)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public void OnPlayerJoined(
+        NetworkRunner runner,
+        PlayerRef player)
     {
         Debug.Log($"Player Joined: {player}");
 
         if (player == runner.LocalPlayer)
         {
             int index =
-            (player.PlayerId - 1) % spawnPoints.Length;
+                (player.PlayerId - 1) % spawnPoints.Length;
 
-        runner.Spawn(
-            playerAvatarPrefab,
-            spawnPoints[index].position,
-            spawnPoints[index].rotation,
-            player
-        );
+            runner.Spawn(
+                playerAvatarPrefab,
+                spawnPoints[index].position,
+                spawnPoints[index].rotation,
+                player
+            );
 
             Debug.Log("Spawned Local Avatar");
         }
     }
 
-    public void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
+    public void OnPlayerLeft(
+        NetworkRunner runner,
+        PlayerRef player)
     {
         Debug.Log($"Player Left: {player}");
     }
 
-    public void OnInput(NetworkRunner runner, NetworkInput input)
+    public void OnSessionListUpdated(
+        NetworkRunner runner,
+        List<SessionInfo> sessionList)
     {
+        activeSessions = sessionList;
+
+        Debug.Log($"Active Rooms: {activeSessions.Count}");
+
+        foreach (var session in activeSessions)
+        {
+            Debug.Log($"Room: {session.Name}");
+        }
     }
 
-    public void OnInputMissing(NetworkRunner runner, PlayerRef player, NetworkInput input)
-    {
-    }
-
-    public void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason)
-    {
-        Debug.Log($"Shutdown: {shutdownReason}");
-    }
-
-    public void OnConnectedToServer(NetworkRunner runner)
+    public void OnConnectedToServer(
+        NetworkRunner runner)
     {
         Debug.Log("Connected To Server");
     }
 
-    public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason)
+    public void OnDisconnectedFromServer(
+        NetworkRunner runner,
+        NetDisconnectReason reason)
     {
         Debug.Log($"Disconnected: {reason}");
+    }
+
+    public void OnShutdown(
+        NetworkRunner runner,
+        ShutdownReason shutdownReason)
+    {
+        Debug.Log($"Shutdown: {shutdownReason}");
     }
 
     public void OnConnectRequest(
@@ -127,21 +182,9 @@ public class FusionManager : MonoBehaviour, INetworkRunnerCallbacks
     {
     }
 
-    public void OnSessionListUpdated(
-        NetworkRunner runner,
-        List<SessionInfo> sessionList)
-    {
-    }
-
     public void OnCustomAuthenticationResponse(
         NetworkRunner runner,
         Dictionary<string, object> data)
-    {
-    }
-
-    public void OnHostMigration(
-        NetworkRunner runner,
-        HostMigrationToken hostMigrationToken)
     {
     }
 
@@ -161,12 +204,14 @@ public class FusionManager : MonoBehaviour, INetworkRunnerCallbacks
     {
     }
 
-    public void OnSceneLoadDone(NetworkRunner runner)
+    public void OnSceneLoadDone(
+        NetworkRunner runner)
     {
         Debug.Log("Scene Load Done");
     }
 
-    public void OnSceneLoadStart(NetworkRunner runner)
+    public void OnSceneLoadStart(
+        NetworkRunner runner)
     {
         Debug.Log("Scene Load Start");
     }
@@ -182,6 +227,25 @@ public class FusionManager : MonoBehaviour, INetworkRunnerCallbacks
         NetworkRunner runner,
         NetworkObject obj,
         PlayerRef player)
+    {
+    }
+
+    public void OnInput(
+        NetworkRunner runner,
+        NetworkInput input)
+    {
+    }
+
+    public void OnInputMissing(
+        NetworkRunner runner,
+        PlayerRef player,
+        NetworkInput input)
+    {
+    }
+
+    public void OnHostMigration(
+        NetworkRunner runner,
+        HostMigrationToken hostMigrationToken)
     {
     }
 }
