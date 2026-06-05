@@ -116,6 +116,19 @@ await runner.JoinSessionLobby(SessionLobby.Shared);
                 player
             );
 
+        // Move XR Rig to the same chair
+        GameObject xrRig = GameObject.Find("XRPlayerRig");
+        Transform cameraOffset =
+    xrRig.transform.Find("Camera Offset");
+
+        if (cameraOffset != null)
+        {
+            cameraOffset.SetPositionAndRotation(
+                spawnPoints[index].position,
+                spawnPoints[index].rotation
+            );
+        }
+
             Debug.Log("Spawned Local Avatar");
         }
     }
