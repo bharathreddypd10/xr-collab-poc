@@ -158,6 +158,10 @@ await runner.JoinSessionLobby(SessionLobby.Shared);
         NetworkRunner runner)
     {
         Debug.Log("Connected To Server");
+        if (runner.SessionInfo != null)
+    {
+        Debug.Log($"Connected Session: {runner.SessionInfo.Name}");
+    }
     }
 
     public void OnDisconnectedFromServer(

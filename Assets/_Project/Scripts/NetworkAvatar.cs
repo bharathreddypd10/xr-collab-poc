@@ -9,8 +9,8 @@ public class NetworkAvatar : NetworkBehaviour
     public Transform rightHand;
 
     private Transform xrHead;
-    private Transform xrLeftHand;
-    private Transform xrRightHand;
+    private Transform xrLeftController;
+    private Transform xrRightController;
 
     public override void Spawned()
     {
@@ -24,12 +24,23 @@ public class NetworkAvatar : NetworkBehaviour
         // ├ Left Hand
         // └ Right Hand
 
-        xrLeftHand = xrHead.Find("Left Hand");
-        xrRightHand = xrHead.Find("Right Hand");
+        Transform leftHandParent =
+            xrHead.Find("Left Hand");
+
+        Transform rightHandParent =
+            xrHead.Find("Right Hand");
+
+        if (leftHandParent != null)
+            xrLeftController =
+                leftHandParent.Find("XR Controller Left");
+
+        if (rightHandParent != null)
+            xrRightController =
+                rightHandParent.Find("XR Controller Right");
 
         Debug.Log($"XR Head : {xrHead}");
-        Debug.Log($"XR Left : {xrLeftHand}");
-        Debug.Log($"XR Right: {xrRightHand}");
+        Debug.Log($"XR Left Controller: {xrLeftController}");
+        Debug.Log($"XR Right Controller: {xrRightController}");
     }
 
     public override void FixedUpdateNetwork()
@@ -38,28 +49,28 @@ public class NetworkAvatar : NetworkBehaviour
             return;
 
         if (xrHead == null ||
-            xrLeftHand == null ||
-            xrRightHand == null)
+            xrLeftController == null ||
+            xrRightController == null)
             return;
 
         // Move avatar root with XR camera
-        transform.position = xrHead.position;
-        transform.rotation = Quaternion.Euler(
-            0,
-            xrHead.eulerAngles.y,
-            0);
+        // transform.position = xrHead.position;
+        // transform.rotation = Quaternion.Euler(
+        //     0,
+        //     xrHead.eulerAngles.y,
+        //     0);
 
         // Head
         head.position = xrHead.position;
         head.rotation = xrHead.rotation;
 
         // Left Hand
-        leftHand.position = xrLeftHand.position;
-        leftHand.rotation = xrLeftHand.rotation;
+        leftHand.position = xrLeftController.position;
+        leftHand.rotation = xrLeftController.rotation;
 
         // Right Hand
-        rightHand.position = xrRightHand.position;
-        rightHand.rotation = xrRightHand.rotation;
+        rightHand.position = xrRightController.position;
+        rightHand.rotation = xrRightController.rotation;
 
         // Debug.Log($"Avatar Root: {transform.position}");
     }
