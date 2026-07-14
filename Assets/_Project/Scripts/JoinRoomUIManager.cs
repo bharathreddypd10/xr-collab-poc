@@ -1,7 +1,6 @@
 using UnityEngine;
 using TMPro;
 
-
 public class JoinRoomUIManager : MonoBehaviour
 {
     [Header("UI")]
@@ -16,6 +15,12 @@ public class JoinRoomUIManager : MonoBehaviour
     public GameObject joinRoomButton;
 
     private string currentRoomCode;
+
+    private async void OnEnable()
+    {
+        // Connect to lobby only when the room panel becomes active
+        await FusionManager.Instance.ConnectToLobby();
+    }
 
     public async void CreateRoom()
     {
@@ -95,19 +100,6 @@ private void HideUI()
                 "Failed To Join";
         }
     }
-
-//     private IEnumerator HideUIAfterDelay()
-// {
-//     yield return new WaitForSeconds(1f);
-
-//     roomCodeInput.gameObject.SetActive(false);
-
-//     createRoomButton.SetActive(false);
-
-//     joinRoomButton.SetActive(false);
-
-//     statusText.gameObject.SetActive(false);
-// }
 
     private string GenerateRoomCode()
     {
