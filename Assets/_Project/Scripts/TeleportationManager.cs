@@ -22,6 +22,10 @@ public class TeleportationManager : MonoBehaviour
     public KeyCode debugKey = KeyCode.T;
     public KeyCode arcKey   = KeyCode.I;
 
+    [Header("Arc Aim")]
+    [Tooltip("Lower values make the teleport arc ease toward your look direction more slowly, easier to land on seats. Higher values snap faster.")]
+    public float arcAimSmoothSpeed = 6f;
+
     private TeleportationProvider _provider;
     private int                   _debugIndex;
     private bool                  _arcActive;
@@ -85,7 +89,9 @@ public class TeleportationManager : MonoBehaviour
 
         float   rad = 35f * Mathf.Deg2Rad;
         Vector3 dir = horiz * Mathf.Cos(rad) + Vector3.down * Mathf.Sin(rad);
-        teleportInteractor.transform.rotation = Quaternion.LookRotation(dir);
+        Quaternion targetRot = Quaternion.LookRotation(dir);
+        teleportInteractor.transform.rotation = Quaternion.Slerp(
+            teleportInteractor.transform.rotation, targetRot, arcAimSmoothSpeed * Time.deltaTime);
     }
 
     // ─────────────────────────────────────────────────────────────
