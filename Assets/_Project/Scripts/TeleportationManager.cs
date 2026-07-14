@@ -1,16 +1,22 @@
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.XR.Interaction.Toolkit.Interactors;
+using UnityEngine.XR.Interaction.Toolkit.Interactors.Visuals;
 using UnityEngine.XR.Interaction.Toolkit.Locomotion;
 using UnityEngine.XR.Interaction.Toolkit.Locomotion.Teleportation;
 using Unity.XR.CoreUtils;
 
+/// <summary>
+/// Activates the built-in XRI Teleport Interactor (ProjectileCurve arc) on I key.
+/// The XRInteractorLineVisual handles red/cyan colour and the arc shape automatically.
+/// LateUpdate forces the interactor to always face camera-forward so the arc is
+/// visible as a curve in the XR Device Simulator.
+/// </summary>
 [RequireComponent(typeof(XROrigin))]
 public class TeleportationManager : MonoBehaviour
 {
     [Header("Assign in Inspector")]
-    public XRRayInteractor teleportInteractor; // Teleport Interactor — Right Hand
-    public Transform       tableCenter;        // Avatar faces this after teleport
+    public XRRayInteractor teleportInteractor;
+    public Transform       tableCenter;
 
     [Header("Keys")]
     public KeyCode debugKey = KeyCode.T;
@@ -19,15 +25,13 @@ public class TeleportationManager : MonoBehaviour
     private TeleportationProvider _provider;
     private int                   _debugIndex;
     private bool                  _arcActive;
+    private Material              _lineMat;
+    private GameObject            _reticle;
 
-    // visuals
-    private LineRenderer _arcLine;
-    private Material     _arcMat;
-    private GameObject   _reticle;
-
-    // arc state
-    private bool    _arcHitValid;
-    private Vector3 _arcHitPos;
+    // Controller tip glow
+    private GameObject _controllerGlow;
+    private Material   _glowMat;
+    private float      _glowPulse;
 
     // ─────────────────────────────────────────────────────────────
 
@@ -35,17 +39,18 @@ public class TeleportationManager : MonoBehaviour
     {
         _provider = GetComponent<TeleportationProvider>();
 
+        // Wire all anchors to our provider and face them toward the table
         var anchors = FindObjectsByType<TeleportationAnchor>(FindObjectsSortMode.None);
         foreach (var a in anchors)
         {
             a.teleportationProvider = _provider;
             FaceTowardTable(a.transform);
         }
-        Debug.Log($"[TeleportationManager] Ready — {anchors.Length} anchor(s) wired.");
+        Debug.Log($"[TeleportationManager] Ready — {anchors.Length} anchors wired.");
 
-        BuildVisuals();
+        BuildReticle();
+        BuildControllerGlow();
 
-        // Keep built-in interactor off — we draw our own arc
         if (teleportInteractor != null)
             teleportInteractor.gameObject.SetActive(false);
     }
@@ -55,8 +60,32 @@ public class TeleportationManager : MonoBehaviour
         if (Input.GetKeyDown(debugKey)) DebugCycleTeleport();
         if (Input.GetKeyDown(arcKey))   BeginArc();
         if (Input.GetKeyUp(arcKey))     EndArc();
+        if (_arcActive)
+        {
+            UpdateReticle();
+            UpdateArcColor();
+            UpdateControllerGlow();
+        }
+    }
 
-        if (_arcActive) DrawArc();
+    // After XRI's own Update — override the interactor direction so the
+    // ProjectileCurve always shoots camera-forward at 35° down.
+    // Without this, the simulator controller points straight down → straight line.
+    private void LateUpdate()
+    {
+        if (!_arcActive || teleportInteractor == null) return;
+
+        Camera cam = Camera.main;
+        if (cam == null) return;
+
+        Vector3 horiz = cam.transform.forward;
+        horiz.y = 0f;
+        if (horiz.sqrMagnitude < 0.01f) horiz = Vector3.forward;
+        horiz.Normalize();
+
+        float   rad = 35f * Mathf.Deg2Rad;
+        Vector3 dir = horiz * Mathf.Cos(rad) + Vector3.down * Mathf.Sin(rad);
+        teleportInteractor.transform.rotation = Quaternion.LookRotation(dir);
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -65,116 +94,125 @@ public class TeleportationManager : MonoBehaviour
 
     private void BeginArc()
     {
+        if (teleportInteractor == null) return;
+        teleportInteractor.gameObject.SetActive(true);
         _arcActive = true;
-        _arcLine.gameObject.SetActive(true);
+        if (_controllerGlow != null) _controllerGlow.SetActive(true);
+
+        // LineRenderer in the scene has no material (fileID 0) — assign one.
+        // Use Universal Render Pipeline/Unlit and drive _BaseColor each frame
+        // so red/cyan colour works reliably without vertex-colour shader complexity.
+        var lr = teleportInteractor.GetComponent<LineRenderer>();
+        if (lr != null)
+        {
+            _lineMat ??= new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+            _lineMat.SetColor("_BaseColor", new Color(1f, 0.2f, 0.2f)); // start red
+            lr.material          = _lineMat;
+            lr.startWidth        = 0.02f;
+            lr.endWidth          = 0.005f;
+            lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        }
+
+        // Keep XRInteractorLineVisual for arc shape — disable its colour override
+        // so our _BaseColor approach controls the colour instead.
+        var visual = teleportInteractor.GetComponent<XRInteractorLineVisual>();
+        if (visual != null)
+        {
+            visual.lineWidth            = 0.02f;
+            visual.setLineColorGradient = false; // let us control colour via material
+        }
     }
 
     private void EndArc()
     {
-        if (_arcHitValid) TeleportTo(_arcHitPos);
+        if (teleportInteractor == null) return;
 
+        // Teleport if the arc is pointing at a valid target
+        if (teleportInteractor.TryGetHitInfo(out Vector3 hitPos, out _, out _, out bool valid) && valid)
+            TeleportTo(hitPos);
+
+        teleportInteractor.gameObject.SetActive(false);
         _arcActive = false;
-        _arcHitValid = false;
-        _arcLine.positionCount = 0;
-        _arcLine.gameObject.SetActive(false);
-        if (_reticle != null) _reticle.SetActive(false);
+        _reticle?.SetActive(false);
+        _controllerGlow?.SetActive(false);
     }
 
     // ─────────────────────────────────────────────────────────────
-    //  Arc drawing — always follows camera forward, ignores controller rotation
+    //  Reticle
     // ─────────────────────────────────────────────────────────────
 
-    private void DrawArc()
+    private void UpdateReticle()
     {
-        Camera cam = Camera.main;
-        if (cam == null) return;
-
-        // Origin: always at waist/hip height to the right of camera.
-        // This keeps the full arc curve visible from first-person — starting the arc
-        // at eye level and shooting forward means you look straight along it (appears as a dot).
-        Vector3 origin = cam.transform.position
-                       + cam.transform.right   * 0.3f   // right-hand side
-                       + Vector3.down          * 0.8f   // waist height
-                       + cam.transform.forward * 0.2f;  // slightly in front
-
-        // Direction: camera horizontal forward tilted 30° downward.
-        Vector3 camFwd     = cam.transform.forward;
-        Vector3 horizontal = new Vector3(camFwd.x, 0f, camFwd.z);
-        if (horizontal.sqrMagnitude < 0.01f) horizontal = Vector3.forward;
-        horizontal.Normalize();
-
-        float rad = 30f * Mathf.Deg2Rad;
-        Vector3 vel = (horizontal * Mathf.Cos(rad) + Vector3.down * Mathf.Sin(rad)) * 7f;
-
-        // Simulate parabola
-        var     pts    = new List<Vector3>();
-        Vector3 pos    = origin;
-        float   dt     = 0.05f;
-        bool    hasHit = false;
-        Vector3 hitPt  = Vector3.zero;
-        Vector3 hitNrm = Vector3.up;
-        int     mask   = Physics.DefaultRaycastLayers;
-
-        for (int i = 0; i < 45; i++)
-        {
-            pts.Add(pos);
-            vel.y        += -9.8f * dt;
-            Vector3 next  = pos + vel * dt;
-            if (Physics.Linecast(pos, next, out RaycastHit hit, mask))
-            {
-                pts.Add(hit.point);
-                hitPt  = hit.point;
-                hitNrm = hit.normal;
-                hasHit = true;
-                break;
-            }
-            pos = next;
-            if (pos.y < origin.y - 25f) break;
-        }
-
-        // Is landing point near a TeleportationAnchor?
-        _arcHitValid = false;
-        _arcAnchorHit = null;
-        if (hasHit)
-        {
-            foreach (var col in Physics.OverlapSphere(hitPt, 0.5f))
-            {
-                var a = col.GetComponent<TeleportationAnchor>();
-                if (a != null) { _arcAnchorHit = a; break; }
-            }
-
-            if (_arcAnchorHit != null)
-            {
-                _arcHitPos   = _arcAnchorHit.transform.position;
-                _arcHitValid = true;
-            }
-            else if (Vector3.Angle(hitNrm, Vector3.up) < 45f)
-            {
-                _arcHitPos   = hitPt;
-                _arcHitValid = true;
-            }
-        }
-
-        // Line colour: cyan = valid, red = invalid
-        Color c = _arcHitValid
-            ? new Color(0f, 0.9f, 1f, 1f)
-            : new Color(1f, 0.2f, 0.2f, 1f);
-        _arcLine.startColor = c;
-        _arcLine.endColor   = new Color(c.r, c.g, c.b, 0.2f);
-
-        _arcLine.positionCount = pts.Count;
-        _arcLine.SetPositions(pts.ToArray());
-
-        // Reticle
-        if (_reticle != null)
-        {
-            _reticle.SetActive(_arcHitValid);
-            if (_arcHitValid)
-                _reticle.transform.position = _arcHitPos + Vector3.up * 0.01f;
-        }
+        if (_reticle == null || teleportInteractor == null) return;
+        bool hit = teleportInteractor.TryGetHitInfo(out Vector3 pos, out _, out _, out bool valid) && valid;
+        _reticle.SetActive(hit);
+        if (hit) _reticle.transform.position = pos + Vector3.up * 0.01f;
     }
 
-    private TeleportationAnchor _arcAnchorHit;
+    private void UpdateArcColor()
+    {
+        if (_lineMat == null) return;
+        bool valid = teleportInteractor.TryGetHitInfo(out _, out _, out _, out bool isValid) && isValid;
+        _lineMat.SetColor("_BaseColor", valid
+            ? new Color(0f, 0.9f, 1f)   // cyan  — valid anchor
+            : new Color(1f, 0.2f, 0.2f)); // red   — no target
+    }
+
+    // ── Reticle fields ────────────────────────────────────────────
+    private LineRenderer _ringLine;
+    private LineRenderer _outerRingLine;
+    private Material     _reticleMat;
+    private float        _pulseTime;
+
+    private void BuildReticle()
+    {
+        _reticleMat = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+
+        // Root object that holds both rings
+        _reticle = new GameObject("_TeleportReticle");
+
+        // Inner solid ring
+        var innerGo = new GameObject("InnerRing");
+        innerGo.transform.SetParent(_reticle.transform);
+        _ringLine = innerGo.AddComponent<LineRenderer>();
+        SetupRingRenderer(_ringLine, 0.45f, 0.018f, 32);
+
+        // Outer thinner ring
+        var outerGo = new GameObject("OuterRing");
+        outerGo.transform.SetParent(_reticle.transform);
+        _outerRingLine = outerGo.AddComponent<LineRenderer>();
+        SetupRingRenderer(_outerRingLine, 0.62f, 0.006f, 32);
+
+        // Small flat disc underneath (subtle fill)
+        var disc = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        disc.name = "Disc";
+        disc.transform.SetParent(_reticle.transform);
+        disc.transform.localScale = new Vector3(0.8f, 0.002f, 0.8f);
+        Destroy(disc.GetComponent<Collider>());
+        var discMat = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+        discMat.SetColor("_BaseColor", new Color(0f, 0.7f, 1f, 0.15f));
+        disc.GetComponent<Renderer>().material = discMat;
+
+        _reticle.SetActive(false);
+    }
+
+    private void SetupRingRenderer(LineRenderer lr, float radius, float width, int segments)
+    {
+        lr.material          = _reticleMat;
+        lr.startWidth        = width;
+        lr.endWidth          = width;
+        lr.loop              = true;
+        lr.useWorldSpace     = false;
+        lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        lr.receiveShadows    = false;
+        lr.positionCount     = segments;
+
+        for (int i = 0; i < segments; i++)
+        {
+            float a = i / (float)segments * Mathf.PI * 2f;
+            lr.SetPosition(i, new Vector3(Mathf.Cos(a) * radius, 0.01f, Mathf.Sin(a) * radius));
+        }
+    }
 
     // ─────────────────────────────────────────────────────────────
     //  Teleport
@@ -205,38 +243,6 @@ public class TeleportationManager : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────
-    //  Visuals setup
-    // ─────────────────────────────────────────────────────────────
-
-    private void BuildVisuals()
-    {
-        // Arc line
-        var go = new GameObject("_ArcLine");
-        go.transform.SetParent(transform);
-        _arcLine = go.AddComponent<LineRenderer>();
-        _arcMat  = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit"));
-        _arcMat.SetColor("_BaseColor", Color.white);
-        _arcLine.sharedMaterial    = _arcMat;
-        _arcLine.startWidth        = 0.025f;
-        _arcLine.endWidth          = 0.008f;
-        _arcLine.useWorldSpace     = true;
-        _arcLine.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-        _arcLine.receiveShadows    = false;
-        _arcLine.positionCount     = 0;
-        _arcLine.gameObject.SetActive(false);
-
-        // Reticle disc
-        _reticle = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-        _reticle.name = "_TeleportReticle";
-        _reticle.transform.localScale = new Vector3(0.6f, 0.005f, 0.6f);
-        Destroy(_reticle.GetComponent<Collider>());
-        var reticleMat = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit"));
-        reticleMat.SetColor("_BaseColor", new Color(0f, 0.9f, 1f, 0.6f));
-        _reticle.GetComponent<Renderer>().material = reticleMat;
-        _reticle.SetActive(false);
-    }
-
-    // ─────────────────────────────────────────────────────────────
     //  Helpers
     // ─────────────────────────────────────────────────────────────
 
@@ -259,8 +265,68 @@ public class TeleportationManager : MonoBehaviour
             : Quaternion.identity;
     }
 
+    // ─────────────────────────────────────────────────────────────
+    //  Controller glow — pulsing orb at joystick tip
+    // ─────────────────────────────────────────────────────────────
+
+    private void BuildControllerGlow()
+    {
+        if (teleportInteractor == null) return;
+
+        _controllerGlow = new GameObject("_ControllerGlow");
+        // No parent — we track the controller tip position manually each frame
+        // to avoid hierarchy scale / position issues with the interactor transform
+        _controllerGlow.transform.localScale = Vector3.one * 0.012f;
+
+        // Outer soft sphere
+        var outer = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        outer.transform.SetParent(_controllerGlow.transform);
+        outer.transform.localPosition = Vector3.zero;
+        outer.transform.localScale    = Vector3.one;
+        Destroy(outer.GetComponent<Collider>());
+        _glowMat = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+        _glowMat.SetColor("_BaseColor", new Color(1f, 0.15f, 0.1f));
+        outer.GetComponent<Renderer>().material = _glowMat;
+
+        // Inner bright core
+        var inner = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        inner.transform.SetParent(_controllerGlow.transform);
+        inner.transform.localPosition = Vector3.zero;
+        inner.transform.localScale    = Vector3.one * 0.45f;
+        Destroy(inner.GetComponent<Collider>());
+        var coreMat = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+        coreMat.SetColor("_BaseColor", Color.white);
+        inner.GetComponent<Renderer>().material = coreMat;
+
+        _controllerGlow.SetActive(false);
+    }
+
+    private void UpdateControllerGlow()
+    {
+        if (_controllerGlow == null || teleportInteractor == null) return;
+
+        // Snap to the actual ray origin (controller tip) each frame
+        Transform tip = teleportInteractor.rayOriginTransform
+            ?? teleportInteractor.attachTransform
+            ?? teleportInteractor.transform;
+        _controllerGlow.transform.position = tip.position;
+
+        // Pulse size
+        _glowPulse += Time.deltaTime * 4f;
+        float scale = 0.012f + Mathf.Sin(_glowPulse) * 0.002f;
+        _controllerGlow.transform.localScale = Vector3.one * scale;
+
+        bool valid = teleportInteractor.TryGetHitInfo(out _, out _, out _, out bool isValid) && isValid;
+        Color c = valid
+            ? new Color(0.1f, 0.4f, 1f)   // blue  — valid anchor
+            : new Color(1f,   0.15f, 0.1f); // red   — no target
+        if (_glowMat != null) _glowMat.SetColor("_BaseColor", c);
+    }
+
     private void OnDestroy()
     {
-        if (_arcMat != null) Destroy(_arcMat);
+        if (_lineMat  != null) Destroy(_lineMat);
+        if (_glowMat  != null) Destroy(_glowMat);
+        if (_reticleMat != null) Destroy(_reticleMat);
     }
 }
