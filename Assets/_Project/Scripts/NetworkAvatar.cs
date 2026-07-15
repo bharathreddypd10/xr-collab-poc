@@ -1,8 +1,15 @@
+using System;
 using Fusion;
 using UnityEngine;
 
 public class NetworkAvatar : NetworkBehaviour
 {
+    // The local player's own spawned avatar, set once its NetworkObject gains input authority.
+    public static NetworkAvatar Local { get; private set; }
+
+    public static event Action<NetworkAvatar> LocalAvatarSpawned;
+    public static event Action LocalAvatarDespawned;
+
     [Header("Avatar Parts")]
     public Transform head;
     public Transform leftHand;
@@ -16,6 +23,9 @@ public class NetworkAvatar : NetworkBehaviour
     {
         if (!Object.HasInputAuthority)
             return;
+
+        Local = this;
+        LocalAvatarSpawned?.Invoke(this);
 
         xrHead = Camera.main.transform;
 
@@ -73,5 +83,14 @@ public class NetworkAvatar : NetworkBehaviour
         rightHand.rotation = xrRightController.rotation;
 
         // Debug.Log($"Avatar Root: {transform.position}");
+    }
+
+    public override void Despawned(NetworkRunner runner, bool hasState)
+    {
+        if (Local == this)
+        {
+            Local = null;
+            LocalAvatarDespawned?.Invoke();
+        }
     }
 }
