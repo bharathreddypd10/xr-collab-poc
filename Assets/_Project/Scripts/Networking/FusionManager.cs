@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Fusion;
 using Fusion.Sockets;
+using Photon.Voice.Fusion;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -34,10 +35,20 @@ public class FusionManager : MonoBehaviour, INetworkRunnerCallbacks
             return;
         }
 
+#if PLATFORM_ANDROID
+        if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission(UnityEngine.Android.Permission.Microphone))
+            UnityEngine.Android.Permission.RequestUserPermission(UnityEngine.Android.Permission.Microphone);
+#endif
+
         runner = gameObject.AddComponent<NetworkRunner>();
         runner.ProvideInput = true;
         runner.AddCallbacks(this);
         sceneManager = gameObject.AddComponent<NetworkSceneManagerDefault>();
+
+        // Must be added after NetworkRunner: FusionVoiceClient.Awake() looks up
+        // the NetworkRunner on this GameObject via GetComponent.
+        var voiceClient = gameObject.AddComponent<FusionVoiceClient>();
+        runner.AddCallbacks(voiceClient);
     }
 
     // Call this from UI when the room panel opens, not on Start
